@@ -27,6 +27,7 @@ class RGBMatrixDisplayTarget(DisplayTarget):
         self.height = height
         self.matrix_options = matrix_options
         self.matrix = None
+        self.canvas = None
         self._initialized = False
 
     def initialize(self):
@@ -37,26 +38,29 @@ class RGBMatrixDisplayTarget(DisplayTarget):
         try:
             from rgbmatrix import RGBMatrix, RGBMatrixOptions
         except ImportError:
-            raise ImportError(
-                "rpi-rgb-led-matrix library not found. "
-                "Install with: pip install rpi-rgb-led-matrix"
-            )
+            from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
+
+            # raise ImportError(
+            #     "rpi-rgb-led-matrix library not found. "
+            #     "Install with: pip install rpi-rgb-led-matrix"
+            # )
 
         # Configure matrix options
         options = RGBMatrixOptions()
-        options.rows = self.matrix_options.get('rows', 32)
-        options.cols = self.matrix_options.get('cols', 64)
-        options.chain_length = self.matrix_options.get('chain_length', 1)
-        options.parallel = self.matrix_options.get('parallel', 1)
-        options.hardware_mapping = self.matrix_options.get('hardware_mapping', 'regular')
-        options.pwm_bits = self.matrix_options.get('pwm_bits', 11)
-        options.brightness = self.matrix_options.get('brightness', 100)
-        options.pwm_lsb_nanoseconds = self.matrix_options.get('pwm_lsb_nanoseconds', 130)
-        options.led_rgb_sequence = self.matrix_options.get('led_rgb_sequence', 'RGB')
-        options.scan_mode = self.matrix_options.get('scan_mode', 0)
+        options.rows = self.matrix_options.get("rows", 32)
+        options.cols = self.matrix_options.get("cols", 64)
+        options.chain_length = self.matrix_options.get("chain_length", 1)
+        options.parallel = self.matrix_options.get("parallel", 1)
+        options.hardware_mapping = self.matrix_options.get("hardware_mapping", "regular")
+        options.pwm_bits = self.matrix_options.get("pwm_bits", 11)
+        options.brightness = self.matrix_options.get("brightness", 100)
+        options.pwm_lsb_nanoseconds = self.matrix_options.get("pwm_lsb_nanoseconds", 130)
+        options.led_rgb_sequence = self.matrix_options.get("led_rgb_sequence", "RGB")
+        options.scan_mode = self.matrix_options.get("scan_mode", 0)
 
         # Create matrix
         self.matrix = RGBMatrix(options=options)
+        self.canvas = self.matrix.CreateFrameCanvas()
         self._initialized = True
 
     def display(self, buffer: RenderBuffer):
@@ -72,8 +76,12 @@ class RGBMatrixDisplayTarget(DisplayTarget):
         # Copy buffer pixels to matrix
         for y in range(min(self.height, buffer.height)):
             for x in range(min(self.width, buffer.width)):
-                r, g, b = buffer.get_pixel(x, y)
-                self.matrix.SetPixel(x, y, r, g, b)
+                try:
+                    r, g, b = buffer.get_pixel(x, y)
+                except:
+                    r, g, b, a = buffer.get_pixel(x, y)
+                self.canvas.SetPixel(x, y, r, g, b)
+        self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def shutdown(self):
         """Clean up the RGB matrix."""
@@ -81,8 +89,9 @@ class RGBMatrixDisplayTarget(DisplayTarget):
             return
 
         if self.matrix:
-            self.matrix.Clear()
+            self.canvas.Clear()
             self.matrix = None
+            self.canvas = None
 
         self._initialized = False
 

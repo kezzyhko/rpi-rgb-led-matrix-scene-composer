@@ -1,7 +1,9 @@
 """Table component for rendering structured data on LED matrices."""
 
+from typing import Any, Dict, List, Literal, Tuple
+
 import numpy as np
-from typing import List, Dict, Tuple, Any
+
 from .component import Component, cache_with_dict
 from .render_buffer import RenderBuffer
 from .text_component import TextComponent
@@ -19,6 +21,7 @@ class TableComponent(Component):
     - Optional borders between cells/rows
     - Separate styling for header row
     - Uses TextComponent with configurable font height (4-16px)
+    - Automatic or manual scrolling support
     """
 
     def __init__(
@@ -34,7 +37,12 @@ class TableComponent(Component):
         cell_padding: int = 1,
         show_borders: bool = True,
         show_headers: bool = True,
-        border_color: Tuple[int, int, int] = (64, 64, 64)
+        border_color: Tuple[int, int, int] = (64, 64, 64),
+        max_width: int | None = None,
+        max_height: int | None = None,
+        autoscroll: Literal["X", "Y", "BOTH", "NONE"] = "NONE",
+        scroll_speed: float = 20.0,
+        scroll_pause: float = 1.0,
     ):
         """
         Initialize TableComponent.
@@ -52,6 +60,11 @@ class TableComponent(Component):
             show_borders: Whether to draw borders between cells
             show_headers: Whether to display header row (default True)
             border_color: Color of borders
+            max_width: Maximum display width (enables horizontal scrolling if content wider)
+            max_height: Maximum display height (enables vertical scrolling if content taller)
+            autoscroll: Automatic scrolling direction ('X', 'Y', 'BOTH', 'NONE')
+            scroll_speed: Auto-scroll speed in pixels per second
+            scroll_pause: Pause duration at start/end of auto-scroll
         """
         super().__init__()
 
@@ -65,6 +78,15 @@ class TableComponent(Component):
         self.show_borders = show_borders
         self.show_headers = show_headers
         self.border_color = border_color
+        self.max_width = max_width
+        self.max_height = max_height
+        self.autoscroll = autoscroll
+        self.scroll_speed = scroll_speed
+        self.scroll_pause = scroll_pause
+
+        # Manual scroll offsets
+        self.scroll_offset_x = 0
+        self.scroll_offset_y = 0
 
         # Derive headers from first dict if not provided
         if headers is None:
@@ -81,12 +103,21 @@ class TableComponent(Component):
         else:
             self.col_widths = col_widths
 
-        # Calculate total dimensions
-        self._width = self._calculate_width()
-        self._height = self._calculate_height()
+        # Calculate total table dimensions (full size)
+        self._full_width = self._calculate_width()
+        self._full_height = self._calculate_height()
+
+        # Calculate display dimensions (viewport size)
+        self._display_width = min(self._full_width, max_width) if max_width else self._full_width
+        self._display_height = (
+            min(self._full_height, max_height) if max_height else self._full_height
+        )
 
         # Pre-render all text cells
         self._cell_cache = self._create_cell_cache()
+
+        # Pre-render full table buffer (reused during scrolling)
+        self._full_table_buffer = None
 
     def _calculate_col_widths(self) -> List[int]:
         """Auto-calculate column widths based on content."""
@@ -104,7 +135,7 @@ class TableComponent(Component):
                 font_height=self.font_height,
                 fgcolor=self.header_fgcolor,
                 bgcolor=None,
-                padding=0
+                padding=0,
             )
             max_width = max(max_width, header_text.width)
 
@@ -116,7 +147,7 @@ class TableComponent(Component):
                     font_height=self.font_height,
                     fgcolor=self.fgcolor,
                     bgcolor=None,
-                    padding=0
+                    padding=0,
                 )
                 max_width = max(max_width, cell_text.width)
 
@@ -149,7 +180,7 @@ class TableComponent(Component):
             font_height=self.font_height,
             fgcolor=self.fgcolor,
             bgcolor=None,
-            padding=self.cell_padding
+            padding=self.cell_padding,
         )
         row_height = dummy_text.height
 
@@ -175,7 +206,7 @@ class TableComponent(Component):
                     font_height=self.font_height,
                     fgcolor=self.header_fgcolor,
                     bgcolor=self.header_bgcolor,
-                    padding=self.cell_padding
+                    padding=self.cell_padding,
                 )
                 cache[(0, col_idx)] = text_comp
 
@@ -191,32 +222,18 @@ class TableComponent(Component):
                     font_height=self.font_height,
                     fgcolor=self.fgcolor,
                     bgcolor=self.bgcolor,
-                    padding=self.cell_padding
+                    padding=self.cell_padding,
                 )
                 cache[(actual_row_idx, col_idx)] = text_comp
 
         return cache
 
-    @property
-    def width(self) -> int:
-        return self._width
+    def _render_full_table(self, time: float) -> RenderBuffer:
+        """Render complete table to buffer (used for scrolling)."""
+        if self._full_table_buffer is not None:
+            return self._full_table_buffer
 
-    @property
-    def height(self) -> int:
-        return self._height
-
-    def compute_state(self, time: float) -> dict:
-        """Compute state - static table, doesn't change with time."""
-        return {
-            'data': str(self.data),  # Convert to string for hashability
-            'headers': tuple(self.headers),
-            'col_widths': tuple(self.col_widths)
-        }
-
-    @cache_with_dict(maxsize=128)
-    def _render_cached(self, state: Dict[str, Any], time: float) -> RenderBuffer:
-        """Render table (cached)."""
-        buffer = RenderBuffer(self._width, self._height)
+        buffer = RenderBuffer(self._full_width, self._full_height)
 
         # Calculate row height
         if not self._cell_cache:
@@ -258,18 +275,137 @@ class TableComponent(Component):
 
             # Add horizontal border
             if self.show_borders and row_idx < num_rows - 1:
-                self._draw_horizontal_line(buffer, y_offset, self._width)
+                self._draw_horizontal_line(buffer, y_offset, self._full_width)
                 y_offset += border_width
 
+        self._full_table_buffer = buffer
         return buffer
 
-    def _blit_buffer(
-        self,
-        dest: RenderBuffer,
-        src: RenderBuffer,
-        x_offset: int,
-        y_offset: int
-    ):
+    def _calculate_scroll_offset(self, time: float, direction: Literal["X", "Y"]) -> int:
+        """Calculate scroll offset for given time and direction."""
+        if direction == "X":
+            available_size = self._display_width
+            total_size = self._full_width
+        else:  # Y
+            available_size = self._display_height
+            total_size = self._full_height
+
+        scroll_distance = total_size - available_size
+
+        if scroll_distance <= 0:
+            return 0
+
+        # Total cycle time: pause + scroll + pause + scroll back
+        scroll_time = scroll_distance / self.scroll_speed
+        cycle_time = (2 * self.scroll_pause) + (2 * scroll_time)
+
+        # Position within current cycle
+        t = time % cycle_time
+
+        if t < self.scroll_pause:
+            # Pause at start
+            return 0
+        elif t < self.scroll_pause + scroll_time:
+            # Scroll forward
+            elapsed = t - self.scroll_pause
+            return int(elapsed * self.scroll_speed)
+        elif t < (2 * self.scroll_pause) + scroll_time:
+            # Pause at end
+            return scroll_distance
+        else:
+            # Scroll back
+            elapsed = t - ((2 * self.scroll_pause) + scroll_time)
+            return int(scroll_distance - (elapsed * self.scroll_speed))
+
+    @property
+    def width(self) -> int:
+        return self._display_width
+
+    @property
+    def height(self) -> int:
+        return self._display_height
+
+    def scroll_to(self, x: int = 0, y: int = 0):
+        """Set scroll position."""
+        max_scroll_x = max(0, self._full_width - self._display_width)
+        max_scroll_y = max(0, self._full_height - self._display_height)
+        self.scroll_offset_x = max(0, min(x, max_scroll_x))
+        self.scroll_offset_y = max(0, min(y, max_scroll_y))
+
+    def scroll_by(self, dx: int = 0, dy: int = 0):
+        """Scroll by delta."""
+        self.scroll_to(self.scroll_offset_x + dx, self.scroll_offset_y + dy)
+
+    def can_scroll_horizontal(self) -> bool:
+        """Check if horizontal scrolling is possible."""
+        return self.max_width is not None and self._full_width > self._display_width
+
+    def can_scroll_vertical(self) -> bool:
+        """Check if vertical scrolling is possible."""
+        return self.max_height is not None and self._full_height > self._display_height
+
+    def is_focusable(self) -> bool:
+        """Table component is focusable if it can scroll."""
+        return self.can_scroll_horizontal() or self.can_scroll_vertical()
+
+    def compute_state(self, time: float) -> dict:
+        """Compute state - includes scroll offsets if scrolling is enabled."""
+        state = {
+            "data": str(self.data),
+            "headers": tuple(self.headers),
+            "col_widths": tuple(self.col_widths),
+        }
+
+        # Add auto-scroll offsets to state
+        if self.autoscroll in ("X", "BOTH"):
+            state["autoscroll_x"] = self._calculate_scroll_offset(time, "X")
+
+        if self.autoscroll in ("Y", "BOTH"):
+            state["autoscroll_y"] = self._calculate_scroll_offset(time, "Y")
+
+        # Add manual scroll offsets
+        state["scroll_x"] = self.scroll_offset_x
+        state["scroll_y"] = self.scroll_offset_y
+
+        return state
+
+    @cache_with_dict(maxsize=128)
+    def _render_cached(self, state: Dict[str, Any], time: float) -> RenderBuffer:
+        """Render table viewport (cached)."""
+        # Get full table buffer
+        full_buffer = self._render_full_table(time)
+
+        # Determine effective scroll offsets (auto + manual)
+        scroll_x = state.get("scroll_x", 0)
+        scroll_y = state.get("scroll_y", 0)
+
+        if self.autoscroll in ("X", "BOTH"):
+            scroll_x += state.get("autoscroll_x", 0)
+
+        if self.autoscroll in ("Y", "BOTH"):
+            scroll_y += state.get("autoscroll_y", 0)
+
+        # Clamp scroll offsets
+        max_scroll_x = max(0, self._full_width - self._display_width)
+        max_scroll_y = max(0, self._full_height - self._display_height)
+        scroll_x = max(0, min(scroll_x, max_scroll_x))
+        scroll_y = max(0, min(scroll_y, max_scroll_y))
+
+        # Create viewport buffer
+        viewport = RenderBuffer(self._display_width, self._display_height)
+
+        # Copy visible portion from full buffer
+        for y in range(self._display_height):
+            for x in range(self._display_width):
+                src_x = scroll_x + x
+                src_y = scroll_y + y
+                if 0 <= src_x < self._full_width and 0 <= src_y < self._full_height:
+                    pixel = full_buffer.get_pixel(src_x, src_y)
+                    viewport.set_pixel(x, y, pixel)
+
+        return viewport
+
+    def _blit_buffer(self, dest: RenderBuffer, src: RenderBuffer, x_offset: int, y_offset: int):
         """Blit source buffer onto destination buffer at offset."""
         for y in range(src.height):
             for x in range(src.width):
@@ -280,24 +416,13 @@ class TableComponent(Component):
                     pixel = src.get_pixel(x, y)
                     dest.set_pixel(dest_x, dest_y, pixel)
 
-    def _draw_vertical_line(
-        self,
-        buffer: RenderBuffer,
-        x: int,
-        y_start: int,
-        height: int
-    ):
+    def _draw_vertical_line(self, buffer: RenderBuffer, x: int, y_start: int, height: int):
         """Draw a vertical border line."""
         for y in range(y_start, y_start + height):
             if 0 <= x < buffer.width and 0 <= y < buffer.height:
                 buffer.set_pixel(x, y, self.border_color)
 
-    def _draw_horizontal_line(
-        self,
-        buffer: RenderBuffer,
-        y: int,
-        width: int
-    ):
+    def _draw_horizontal_line(self, buffer: RenderBuffer, y: int, width: int):
         """Draw a horizontal border line."""
         for x in range(width):
             if 0 <= x < buffer.width and 0 <= y < buffer.height:

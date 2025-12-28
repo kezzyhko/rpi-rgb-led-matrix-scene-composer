@@ -4,349 +4,304 @@ A high-level scene-based rendering engine for RGB LED matrices on Raspberry Pi.
 
 ## Overview
 
-This library provides a clean, composable architecture for creating animated content on RGB LED matrices. It uses a scene-graph approach with components, scenes, and an orchestrator managing the render loop.
+This library provides a clean, composable architecture for creating animated content on RGB LED matrices. It uses a scene-graph approach with components, layouts, and scenes managing positioning and animations.
 
 ## Architecture
 
 **Clean one-way dependency flow:**
 
 ```
-Component (knows nothing)
+Component (pure, standalone)
     ↓
-Scene (knows about Components)
+Layout (automatic positioning)
     ↓
-Orchestrator (knows about Scenes) [OPTIONAL]
+Scene (composition + animations)
 ```
 
 **Core classes:**
-- **Component**: Base class for renderable elements (text, tables, filters, etc.)
-  - Pure, standalone - no knowledge of Scene
-  - Renders to RenderBuffer when given time parameter
-- **Scene**: Container for components with positioning and layering
-  - Composes components
-  - Can work standalone or with Orchestrator
+- **Component**: Base class for renderable elements (text, tables, progress bars, images, etc.)
+- **Layout**: Automatic positioning (VStack, HStack, Grid, Absolute)
+- **Scene**: Container for components with animations and focus management
 - **DisplayTarget**: Abstraction for output (terminal emulator or physical matrix)
-- **RenderBuffer**: Fixed-size RGB pixel buffer backed by numpy
-
-**Optional (for multi-scene apps):**
-- **Orchestrator**: Manages multiple scenes, transitions, and global time
-  - Only needed when you have multiple scenes
-  - Provides unified time source across scenes
-
-## Features
-
-- Simple Scene + Component composition model
-- Automatic caching for static/slow-updating content
-- Built-in components: Text, Tables, Rainbow filters
-- Hardware-agnostic rendering
-- Terminal emulator for development (no hardware needed!)
-- Optional Orchestrator for multi-scene applications
 
 ## Installation
-
-### Quick Start (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer.git
 cd rpi-rgb-led-matrix-scene-composer
 
-# Run demos - they auto-install dependencies!
-./run_terminal_demo.sh    # Terminal emulator (no hardware needed)
-./run_matrix_demo.sh      # Physical RGB matrix (requires hardware)
-```
-
-### Manual Installation
-
-```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
 # Install core package
 pip install -e .
 
-# Install with PioMatter support (Raspberry Pi 5)
-pip install -e ".[piomatter]"
-
-# Install with RGB Matrix support (older Pi models)
-pip install -e ".[rgbmatrix]"
-
-# Install development tools
-pip install -e ".[dev]"
+# Install with hardware support
+pip install -e ".[piomatter]"    # Raspberry Pi 5
+pip install -e ".[rgbmatrix]"    # Older Pi models
 ```
 
-## Quick Start - Scene + Components (Simplest)
-
-Components are **pure** - they don't know about Scene. Scene composes components.
+## Quick Start
 
 ```python
 from matrix_scene_composer import (
-    Scene, TableComponent, Text4pxComponent, TerminalDisplayTarget
+    Scene, TextComponent, VStack, TerminalDisplayTarget
 )
 import time
 
-# Step 1: Create components (standalone, no scene reference!)
-data = [
-    {"name": "CPU", "temp": "45C", "load": "23%"},
-    {"name": "GPU", "temp": "67C", "load": "89%"},
-]
-
-table = TableComponent(
-    data=data,
-    text_component=Text4pxComponent,
-    fgcolor=(255, 255, 255),
-    header_bgcolor=(32, 32, 32),
-    show_borders=True
-)
-
-# Step 2: Create scene and add components
-scene = Scene(width=64, height=32)
-scene.add_component('table', table, position=(2, 2))
-
-# Step 3: Display
+# Create display (swap for RGBMatrixDisplayTarget on hardware)
 display = TerminalDisplayTarget(width=64, height=32)
 
-with display:
-    start_time = time.time()
-    while time.time() - start_time < 5.0:
-        current_time = time.time() - start_time
-        buffer = scene.render(current_time)
-        display.display(buffer)
-        time.sleep(1/30)  # 30 FPS
-```
-
-## Advanced Example - Multi-Scene with Orchestrator
-
-Use the Orchestrator **only when you need multiple scenes** with transitions.
-
-```python
-from matrix_scene_composer import (
-    Orchestrator, Scene, TableComponent, RainbowFilter,
-    Text5pxComponent, TerminalDisplayTarget
-)
-import time
-
-# ============================================================================
-# Data Sources (assume these fetch real data)
-# ============================================================================
-
-def get_system_stats():
-    """Return current system metrics."""
-    return [
-        {"component": "CPU", "usage": "45%", "temp": "67C"},
-        {"component": "RAM", "usage": "72%", "temp": "45C"},
-        {"component": "GPU", "usage": "89%", "temp": "82C"},
-    ]
-
-def get_weather_info():
-    """Return current weather."""
-    return {
-        "city": "Stockholm",
-        "temp": "15°C",
-        "condition": "Cloudy"
-    }
-
-# ============================================================================
-# Scene Builders
-# ============================================================================
-
-def create_system_scene(width, height):
-    """System monitoring scene with rainbow effect."""
-    # Create components first (no scene reference!)
-    data = get_system_stats()
-
-    table = TableComponent(
-        data=data,
-        text_component=Text4pxComponent,
-        fgcolor=(255, 255, 255),
-        header_bgcolor=(32, 32, 32),
-        cell_padding=1,
-        show_borders=True
-    )
-
-    # Wrap with animated rainbow effect
-    rainbow_table = RainbowFilter(
-        source_component=table,
-        color_key=(255, 255, 255),
-        direction='horizontal',
-        speed=0.5
-    )
-
-    # Create scene and add components
-    scene = Scene(width, height)
-    scene.add_component('table', rainbow_table, position=(2, 8))
-    return scene
-
-def create_weather_scene(width, height):
-    """Weather display scene."""
-    # Create components first (no scene reference!)
-    weather = get_weather_info()
-    text = f"{weather['city']}\n{weather['temp']}\n{weather['condition']}"
-
-    weather_text = Text5pxComponent(
-        text=text,
-        fgcolor=(255, 255, 255),
-        bgcolor=(0, 0, 64),
-        padding=2
-    )
-
-    # Optional rainbow effect
-    rainbow_weather = RainbowFilter(
-        source_component=weather_text,
-        color_key=(255, 255, 255),
-        direction='vertical',
-        speed=0.8
-    )
-
-    # Create scene and add components
-    scene = Scene(width, height)
-    scene.add_component('weather', rainbow_weather, position=(10, 5))
-    return scene
-
-# ============================================================================
-# Main Application - Scene Rotation
-# ============================================================================
-
-def main():
-    width, height = 64, 32
-
-    # Set up display (swap for RGBMatrixDisplayTarget on real hardware)
-    display = TerminalDisplayTarget(width, height)
-
-    # Create orchestrator
-    orch = Orchestrator(width, height, fps=30)
-    orch.set_display_callback(display.display)
-
-    # Build and register scenes (Orchestrator adopts them)
-    orch.add_scene('system', create_system_scene(width, height))
-    orch.add_scene('weather', create_weather_scene(width, height))
-
-    # Define scene rotation schedule
-    scenes = [
-        ('system', 5.0),   # Show system for 5 seconds
-        ('weather', 5.0),  # Show weather for 5 seconds
-    ]
-
-    # Start display and run with scene rotation
-    with display:
-        scene_idx = 0
-        scene_start = time.time()
-        start_time = time.time()
-
-        orch.transition_to(scenes[scene_idx][0])
-
-        try:
-            while True:
-                current_time = time.time() - start_time
-                elapsed_in_scene = time.time() - scene_start
-                scene_name, duration = scenes[scene_idx]
-
-                # Check if time to switch scenes
-                if elapsed_in_scene >= duration:
-                    scene_idx = (scene_idx + 1) % len(scenes)
-                    next_scene, _ = scenes[scene_idx]
-
-                    # Rebuild scene with fresh data
-                    if next_scene == 'system':
-                        orch.scenes['system'] = create_system_scene(width, height)
-                    elif next_scene == 'weather':
-                        orch.scenes['weather'] = create_weather_scene(width, height)
-
-                    orch.transition_to(next_scene)
-                    scene_start = time.time()
-
-                # Render current frame
-                orch.time = current_time
-                buffer = orch._render_frame()
-                display.display(buffer)
-
-                # Maintain FPS
-                time.sleep(1.0 / orch.fps)
-
-        except KeyboardInterrupt:
-            print("\nShutting down...")
-
-if __name__ == "__main__":
-    main()
-```
-
-## Key Concepts
-
-### Components are Pure and Composable
-
-Components don't know about Scene - they're standalone, reusable building blocks.
-
-```python
-# Components are pure (no scene parameter!)
-table = TableComponent(data=data, ...)
-
-# Wrap with filter (composition)
-rainbow_table = RainbowFilter(source_component=table, ...)
-
-# Scene composes components
+# Create scene with automatic layout
 scene = Scene(width=64, height=32)
-scene.add_component('background', bg_text, position=(0, 0), z_index=1)
-scene.add_component('foreground', fg_text, position=(10, 10), z_index=2)
+layout = VStack(width=64, height=32, spacing=2, alignment='center')
+
+# Add components - no manual positioning needed
+layout.add("title", TextComponent("HELLO WORLD", font_height=5))
+layout.add("message", TextComponent("EASY LAYOUTS", font_height=4))
+
+scene.add_child("layout", layout, position=(0, 0))
+
+# Render loop
+with display:
+    start = time.time()
+    while time.time() - start < 5:
+        buffer = scene.render(time.time() - start)
+        display.display(buffer)
+        time.sleep(1/30)
 ```
 
-### Display Targets are Swappable
+## Components
+
+### TextComponent
+Bitmap text with automatic scrolling.
 
 ```python
-# Development - terminal emulator
-display = TerminalDisplayTarget(64, 32)
+text = TextComponent(
+    text="SCROLLING MESSAGE",
+    font_height=5,              # 4-16px available
+    max_width=64,               # Enable scrolling
+    autoscroll='X',             # Auto-scroll or 'NONE'
+    scroll_speed=20.0,
+    fgcolor=(255, 100, 0)
+)
 
-# Production - physical matrix
-display = RGBMatrixDisplayTarget(64, 32, brightness=80)
-
-# Same code works with both!
+# Manual scrolling
+text.scroll_by(dx=5)
+text.set_text("NEW TEXT")       # Update without resetting scroll
 ```
 
-### Caching is Automatic
+### TableComponent
+Data tables with scrolling support.
 
 ```python
-class MyComponent(Component):
-    def compute_state(self, time):
-        # Return same state = cached rendering
-        return ("static",)
+table = TableComponent(
+    data=[
+        {"name": "CPU", "temp": "45C", "load": "23%"},
+        {"name": "GPU", "temp": "67C", "load": "89%"}
+    ],
+    font_height=4,
+    show_borders=True,
+    max_width=60,               # Enable horizontal scroll
+    max_height=24,              # Enable vertical scroll
+    autoscroll='Y'              # 'X', 'Y', 'BOTH', or 'NONE'
+)
 
-        # Return different state = re-render
-        return ("animated", int(time))
+# Manual scrolling
+table.scroll_by(dy=5)
 ```
 
-## Examples
-
-See the `examples/` directory for more:
-- `simple_scene_example.py` - **Start here!** Simplest Scene + Components example (terminal)
-- `simple_scene_piomatter.py` - Same example but for physical hardware (PioMatter)
-- `demo_rainbow_table.py` - Rainbow system monitor
-- `demo_terminal_emulator.py` - Terminal display demo
-- `demo_orchestrator.py` - Multi-scene showcase with Orchestrator
-
-## Hardware Support
-
-### Raspberry Pi 5 + Adafruit RGB Matrix Bonnet
-
-Uses the `PioMatterDisplayTarget` with the modern PioMatter library:
+### ProgressBar
+Progress indicators with optional labels.
 
 ```python
-from matrix_scene_composer import PioMatterDisplayTarget
+progress = ProgressBar(
+    width=50,
+    height=7,
+    progress=0.75,              # 0.0 to 1.0
+    orientation='horizontal',   # or 'vertical'
+    show_label=True,
+    label_text="LOADING"        # or None for percentage
+)
 
-display = PioMatterDisplayTarget(
+progress.set_progress(0.9)
+```
+
+### Scrollbar
+Scrollbar indicators for showing scroll position.
+
+```python
+scrollbar = Scrollbar(
+    width=6,
+    height=32,
+    orientation='vertical',
+    viewport_size=100,
+    content_size=300,
+    scroll_position=50
+)
+
+scrollbar.set_scroll_position(100)
+```
+
+### ImageComponent
+Display PNG, JPG, GIF images with alpha support.
+
+```python
+image = ImageComponent("logo.png")
+```
+
+### RainbowFilter
+Apply animated rainbow gradients to any component.
+
+```python
+rainbow = RainbowFilter(
+    source_component=text,
+    direction='horizontal',     # 'vertical', 'diagonal'
+    speed=1.0
+)
+```
+
+## Layouts
+
+Automatically position components without manual coordinates.
+
+### VStack - Vertical Stack
+```python
+layout = VStack(
     width=64,
     height=32,
-    n_addr_lines=4,      # 4 for 64x32 panel
-    brightness=1.0       # 0.0 to 1.0
+    spacing=2,
+    alignment='center',         # 'left', 'center', 'right'
+    padding=2
+)
+layout.add("item1", component1)
+layout.add("item2", component2)
+```
+
+### HStack - Horizontal Stack
+```python
+layout = HStack(
+    width=64,
+    height=32,
+    spacing=2,
+    alignment='center',         # 'top', 'center', 'bottom'
+    padding=2
 )
 ```
 
-### Older Raspberry Pi Models
+### Grid - Grid Layout
+```python
+layout = Grid(
+    width=64,
+    height=32,
+    columns=3,
+    spacing=2,
+    padding=2
+)
+```
 
-Uses the `RGBMatrixDisplayTarget` with the classic rpi-rgb-led-matrix library:
+### Absolute - Manual Positioning
+```python
+layout = Absolute(width=64, height=32)
+layout.add("logo", logo, position=(10, 10))
+layout.center("title")
+layout.align_top_right("status", padding=2)
+```
+
+### ZStack - Layered Stack
+```python
+layout = ZStack(
+    width=64,
+    height=32,
+    alignment='center'          # All children at same position
+)
+```
+
+Layouts can be nested inside other layouts.
+
+## Animations
 
 ```python
-from matrix_scene_composer import RGBMatrixDisplayTarget
+from matrix_scene_composer import SlideIn, FadeIn, FadeOut
 
+scene = Scene(
+    width=64,
+    height=32,
+    entrance_animations=[
+        (0.0, SlideIn(target="logo", direction='left', duration=0.5, easing='ease_out'))
+    ],
+    exit_animations=[
+        (0.0, FadeOut(target="logo", duration=0.3))
+    ]
+)
+```
+
+**Available animations:**
+- `SlideIn`, `SlideOut` - Slide from/to direction
+- `FadeIn`, `FadeOut` - Opacity transitions
+- `Animate` - Animate any component property
+- `GravityJump`, `GravityFallIn` - Physics-based animations
+- `Sequence` - Run animations in sequence
+- `Parallel` - Run animations simultaneously
+- `Loop` - Loop an animation
+
+**Easing functions:** `linear`, `ease_in`, `ease_out`, `ease_in_out`, `bounce`, `elastic`, `gravity`
+
+## Focus & Input Handling
+
+Components can be focused for keyboard/input control.
+
+```python
+# Scene manages focus
+scene.focus_next()              # Focus next focusable component
+scene.focus_previous()          # Focus previous
+scene.set_focus("component_id") # Focus specific component
+
+focused = scene.get_focused_component()
+if focused and hasattr(focused, 'scroll_by'):
+    focused.scroll_by(dx=5)     # Scroll focused component
+
+# Focusable components: TextComponent (when scrollable), TableComponent (when scrollable)
+```
+
+## Lifecycle Hooks
+
+Components support lifecycle callbacks.
+
+```python
+component.on_mount(lambda: print("Mounted!"))
+component.on_unmount(lambda: print("Unmounted!"))
+component.on_focus_gain(lambda: print("Focused!"))
+component.on_focus_lost(lambda: print("Lost focus!"))
+```
+
+## Debug Rendering
+
+Enable debug mode to visualize focused components with purple outlines.
+
+```python
+from matrix_scene_composer import Component
+
+Component.DEBUG_RENDER = True   # Enable debug rendering
+```
+
+## Display Targets
+
+### TerminalDisplayTarget
+Development without hardware.
+
+```python
+display = TerminalDisplayTarget(
+    width=64,
+    height=32,
+    use_half_blocks=True,       # Better vertical resolution
+    square_pixels=True,         # Square-ish pixels
+    show_logs=True              # Show log output below matrix
+)
+```
+
+### RGBMatrixDisplayTarget
+Physical matrix for older Raspberry Pi models.
+
+```python
 display = RGBMatrixDisplayTarget(
     width=64,
     height=32,
@@ -354,12 +309,35 @@ display = RGBMatrixDisplayTarget(
 )
 ```
 
+### PioMatterDisplayTarget
+Raspberry Pi 5 with Adafruit Matrix Bonnet.
+
+```python
+display = PioMatterDisplayTarget(
+    width=64,
+    height=32,
+    n_addr_lines=4,             # 4 for 64x32, 5 for 64x64
+    brightness=1.0
+)
+```
+
+## Examples
+
+- `examples/scroll_demo.py` - Text scrolling with focus and manual control
+- `examples/progress_scrollbar_demo.py` - Progress bars and scrollbars with scene switching
+- See `examples/` directory for more
+
 ## Design Principles
 
-- **Clean Architecture**: One-way dependencies (Component → Scene → Orchestrator)
-- **Pure Components**: Components are standalone, no knowledge of Scene
-- **KISS**: Keep it simple - start with Scene + Components, add Orchestrator only if needed
-- **Fixed canvas**: Everything renders to defined width × height
-- **Time as parameter**: Time is passed to `render(time)`, not stored in components
-- **Composable**: Components wrap components (filters, effects, etc.)
-- **Hardware agnostic**: Same code works on terminal or real matrix
+- **Pure Components**: Standalone, reusable building blocks
+- **Automatic Layout**: No manual coordinate calculations
+- **Focus Management**: Built-in keyboard/input support
+- **Hardware Agnostic**: Same code works on terminal or physical matrix
+- **Composable**: Components wrap components (filters, effects)
+- **Cached Rendering**: Automatic performance optimization
+
+## Links
+
+- [MIT License](LICENSE)
+- [Original repo](https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer) (gone now)
+- [Another reupload from PyPI](https://github.com/krruzic/rpi-rgb-led-matrix-scene-composer)
