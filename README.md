@@ -2,6 +2,12 @@
 
 A high-level scene-based rendering engine for RGB LED matrices on Raspberry Pi.
 
+## Links
+
+- [MIT License](LICENSE)
+- [Original repo](https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer) (gone now)
+- [Another reupload from PyPI](https://github.com/krruzic/rpi-rgb-led-matrix-scene-composer)
+
 ## Overview
 
 This library provides a clean, composable architecture for creating animated content on RGB LED matrices. It uses a scene-graph approach with components, layouts, and scenes managing positioning and animations.
@@ -335,9 +341,3 @@ display = PioMatterDisplayTarget(
 - **Hardware Agnostic**: Same code works on terminal or physical matrix
 - **Composable**: Components wrap components (filters, effects)
 - **Cached Rendering**: Automatic performance optimization
-
-## Links
-
-- [MIT License](LICENSE)
-- [Original repo](https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer) (gone now)
-- [Another reupload from PyPI](https://github.com/krruzic/rpi-rgb-led-matrix-scene-composer)
