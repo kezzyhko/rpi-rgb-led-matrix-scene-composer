@@ -7,8 +7,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from matrix_scene_composer import (
-    Orchestrator, Scene, TableComponent,
-    Text4pxComponent, Text5pxComponent
+    Orchestrator, Scene, TableComponent
 )
 
 
@@ -17,7 +16,7 @@ def render_to_terminal(buffer):
     height, width = buffer.height, buffer.width
     for y in range(height):
         for x in range(width):
-            r, g, b = buffer.get_pixel(x, y)
+            r, g, b, a = buffer.get_pixel(x, y)
             print(f'\033[38;2;{r};{g};{b}m█\033[0m', end='')
         print()
 
@@ -25,11 +24,11 @@ def render_to_terminal(buffer):
 def test_table_component():
     """Test TableComponent with different configurations."""
 
-    print("\n=== Testing TableComponent with Text4pxComponent ===\n")
+    print("\n=== Testing TableComponent with TextComponent ===\n")
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Sample data - system monitoring
     data = [
@@ -39,9 +38,8 @@ def test_table_component():
     ]
 
     table = TableComponent(
-        scene,
         data=data,
-        text_component=Text4pxComponent,
+        font_height=4,
         fgcolor=(255, 255, 255),
         header_fgcolor=(255, 255, 0),
         header_bgcolor=(0, 0, 128),
@@ -55,7 +53,7 @@ def test_table_component():
     print(f"Column widths: {table.col_widths}")
     print()
 
-    scene.add_component('table', table, position=(2, 2))
+    scene.add_child('table', table, position=(2, 2))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -63,10 +61,10 @@ def test_table_component():
     buffer = orch.render_single_frame(0.0)
     render_to_terminal(buffer)
 
-    print("\n\n=== Testing TableComponent with Text5pxComponent ===\n")
+    print("\n\n=== Testing TableComponent with TextComponent ===\n")
 
     orch2 = Orchestrator(width=width, height=height, fps=10)
-    scene2 = Scene(orch2, width=width, height=height)
+    scene2 = Scene(width=width, height=height)
 
     # Different data - scoreboard
     data2 = [
@@ -76,9 +74,8 @@ def test_table_component():
     ]
 
     table2 = TableComponent(
-        scene2,
         data=data2,
-        text_component=Text5pxComponent,
+        font_height=5,
         fgcolor=(0, 255, 0),
         header_fgcolor=(0, 0, 0),
         header_bgcolor=(0, 255, 0),
@@ -92,7 +89,7 @@ def test_table_component():
     print(f"Column widths: {table2.col_widths}")
     print()
 
-    scene2.add_component('table2', table2, position=(2, 2))
+    scene2.add_child('table2', table2, position=(2, 2))
 
     orch2.add_scene('test2', scene2)
     orch2.transition_to('test2')
@@ -103,7 +100,7 @@ def test_table_component():
     print("\n\n=== Testing TableComponent without borders ===\n")
 
     orch3 = Orchestrator(width=width, height=height, fps=10)
-    scene3 = Scene(orch3, width=width, height=height)
+    scene3 = Scene(width=width, height=height)
 
     # Minimal table
     data3 = [
@@ -112,9 +109,8 @@ def test_table_component():
     ]
 
     table3 = TableComponent(
-        scene3,
         data=data3,
-        text_component=Text4pxComponent,
+        font_height=5,
         fgcolor=(255, 100, 0),
         header_bgcolor=(100, 50, 0),
         cell_padding=2,
@@ -126,7 +122,7 @@ def test_table_component():
     print(f"Column widths: {table3.col_widths}")
     print()
 
-    scene3.add_component('table3', table3, position=(2, 2))
+    scene3.add_child('table3', table3, position=(2, 2))
 
     orch3.add_scene('test3', scene3)
     orch3.transition_to('test3')
@@ -136,7 +132,7 @@ def test_table_component():
 
     print("\n\n=== Summary ===")
     print("TableComponent successfully renders structured data")
-    print("- Supports Text4pxComponent and Text5pxComponent")
+    print("- Supports TextComponent and TextComponent")
     print("- Auto-calculates column widths from content")
     print("- Optional borders and custom styling")
     print("- Perfect for LED matrix displays!")

@@ -1,8 +1,8 @@
 """Rainbow filter component for applying rainbow gradients to other components."""
 
 import math
-from typing import Tuple
-from .component import Component
+from typing import Tuple, Dict, Any
+from .component import Component, cache_with_dict
 from .render_buffer import RenderBuffer
 
 
@@ -53,16 +53,18 @@ class RainbowFilter(Component):
         return self.source_component.height
 
     def compute_state(self, time: float) -> dict:
-        """Compute state - includes time for animation."""
+        """Compute state - does NOT include time (time handled in _render_cached)."""
+        # Include child state hash for cache invalidation
+        from .component import _make_hashable
         return {
-            'source_state': self.source_component.compute_state(time),
-            'time': time,
+            'source_state': _make_hashable(self.source_component.compute_state(time)),
             'speed': self.speed,
             'direction': self.direction
         }
 
-    def render(self, time: float) -> RenderBuffer:
-        """Render filtered component."""
+    @cache_with_dict(maxsize=1)  # Small cache since time changes every frame
+    def _render_cached(self, state: Dict[str, Any], time: float) -> RenderBuffer:
+        """Render filtered component (uses time for animation)."""
         # Get source buffer
         source_buffer = self.source_component.render(time)
 

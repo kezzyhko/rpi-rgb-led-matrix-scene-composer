@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rpi-rgb-led-matrix-scene-composer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scene-based rendering engine for RGB LED matrices"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -30,6 +30,7 @@ keywords = ["raspberry-pi", "led-matrix", "rgb-matrix", "display", "animation"]
 
 dependencies = [
     "numpy>=1.20.0",
+    "pillow>=9.0.0",
 ]
 
 [project.optional-dependencies]

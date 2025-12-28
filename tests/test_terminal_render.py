@@ -39,15 +39,15 @@ if __name__ == "__main__":
     orch.set_display_callback(render_to_terminal)
 
     # Create scene
-    scene = Scene(orch, width=64, height=32)
+    scene = Scene(width=64, height=32)
 
     # Add static red triangle
-    triangle = TriangleComponent(scene, size=12, color=(255, 0, 0))
-    scene.add_component('triangle', triangle, position=(5, 10), z_index=1)
+    triangle = TriangleComponent( size=12, color=(255, 0, 0))
+    scene.add_child('triangle', triangle, position=(5, 10), z_index=1)
 
     # Add animated color-cycling square (slow 10 second cycle)
-    square = AnimatedSquareComponent(scene, size=10, cycle_duration=10.0)
-    scene.add_component('square', square, position=(40, 8), z_index=2)
+    square = AnimatedSquareComponent( size=10, cycle_duration=10.0)
+    scene.add_child('square', square, position=(40, 8), z_index=2)
 
     # Register scene
     orch.add_scene('test_scene', scene)

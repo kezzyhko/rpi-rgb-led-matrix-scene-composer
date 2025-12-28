@@ -30,14 +30,15 @@ class SimpleComponent(Component):
 
     def compute_state(self, time):
         # Static component - state doesn't change
-        return {"static": True}
+        return {"static": True, "color": self.color}
 
-    def render(self, time):
+    def _render_cached(self, state, time):
         # Component renders itself, time is passed in
         buffer = RenderBuffer(self.width, self.height)
+        color = state["color"]
         for y in range(self.height):
             for x in range(self.width):
-                buffer.set_pixel(x, y, self.color)
+                buffer.set_pixel(x, y, color)
         return buffer
 
 
@@ -61,7 +62,7 @@ class AnimatedComponent(Component):
         # State changes every second
         return {"frame": int(time)}
 
-    def render(self, time):
+    def _render_cached(self, state, time):
         # Color cycles based on time
         r = int((time * 50) % 255)
         buffer = RenderBuffer(self.width, self.height)
@@ -81,7 +82,7 @@ def test_component_standalone():
 
     assert buffer.width == 10
     assert buffer.height == 10
-    assert buffer.get_pixel(0, 0) == (255, 0, 0)
+    assert buffer.get_pixel(0, 0)[:3] == (255, 0, 0)
 
 
 def test_component_no_scene_reference():
@@ -100,17 +101,17 @@ def test_scene_composes_components():
 
     # Scene knows about components, not vice versa
     scene = Scene(width=32, height=32)
-    scene.add_component('red', red_box, position=(0, 0))
-    scene.add_component('blue', blue_box, position=(10, 10))
+    scene.add_child('red', red_box, position=(0, 0))
+    scene.add_child('blue', blue_box, position=(10, 10))
 
     # Scene renders by calling component.render(time)
     buffer = scene.render(time=0.0)
 
     # Verify red box rendered at (0, 0)
-    assert buffer.get_pixel(0, 0) == (255, 0, 0)
+    assert buffer.get_pixel(0, 0)[:3] == (255, 0, 0)
 
     # Verify blue box rendered at (10, 10)
-    assert buffer.get_pixel(10, 10) == (0, 0, 255)
+    assert buffer.get_pixel(10, 10)[:3] == (0, 0, 255)
 
 
 def test_animated_component():
@@ -133,7 +134,7 @@ def test_scene_no_orchestrator_required():
     scene = Scene(width=32, height=32)
 
     comp = SimpleComponent()
-    scene.add_component('box', comp, position=(5, 5))
+    scene.add_child('box', comp, position=(5, 5))
 
     # Scene can render without orchestrator
     buffer = scene.render(time=1.5)

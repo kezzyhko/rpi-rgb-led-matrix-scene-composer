@@ -15,16 +15,15 @@ from typing import Tuple
 class TriangleComponent(Component):
     """Renders a static filled triangle."""
 
-    def __init__(self, scene, size: int, color: Tuple[int, int, int]):
+    def __init__(self, size: int, color: Tuple[int, int, int]):
         """
         Initialize triangle component.
 
         Args:
-            scene: Parent scene
             size: Triangle size (width and height)
             color: RGB color tuple
         """
-        super().__init__(scene)
+        super().__init__()
         self._width = size
         self._height = size
         self.color = color
@@ -44,16 +43,11 @@ class TriangleComponent(Component):
             'color': self.color
         }
 
-    def render(self, time: float) -> RenderBuffer:
-        """Render triangle."""
-        if DEBUG:
-            print(f"  TriangleComponent.render(time={time:.2f})")
-        state = self.compute_state(time)
-        return self._render_cached(state)
-
     @cache_with_dict(maxsize=1)  # Static component, only one state
-    def _render_cached(self, state) -> RenderBuffer:
+    def _render_cached(self, state, time: float) -> RenderBuffer:
         """Cached rendering of triangle."""
+        if DEBUG:
+            print(f"  TriangleComponent._render_cached(time={time:.2f})")
         buffer = RenderBuffer(self._width, self._height)
         size = state['size']
         color = state['color']
@@ -74,16 +68,15 @@ class TriangleComponent(Component):
 class AnimatedSquareComponent(Component):
     """Square that cycles through colors over time."""
 
-    def __init__(self, scene, size: int, cycle_duration: float = 2.0):
+    def __init__(self, size: int, cycle_duration: float = 2.0):
         """
         Initialize animated square component.
 
         Args:
-            scene: Parent scene
             size: Square size (width and height)
             cycle_duration: Time in seconds for one complete color cycle
         """
-        super().__init__(scene)
+        super().__init__()
         self._width = size
         self._height = size
         self.cycle_duration = cycle_duration
@@ -113,18 +106,12 @@ class AnimatedSquareComponent(Component):
             'cycle_phase': round(t, 2)  # Round for cache efficiency
         }
 
-    def render(self, time: float) -> RenderBuffer:
-        """Render square with current color."""
-        if DEBUG:
-            print(f"  AnimatedSquareComponent.render(time={time:.2f})")
-        state = self.compute_state(time)
-        if DEBUG:
-            print(f"    State: {state}")
-        return self._render_cached(state)
-
     @cache_with_dict(maxsize=100)  # Cache multiple color variations
-    def _render_cached(self, state) -> RenderBuffer:
+    def _render_cached(self, state, time: float) -> RenderBuffer:
         """Cached rendering of square."""
+        if DEBUG:
+            print(f"  AnimatedSquareComponent._render_cached(time={time:.2f})")
+            print(f"    State: {state}")
         buffer = RenderBuffer(self._width, self._height)
         color = state['color']
 
@@ -143,15 +130,15 @@ if __name__ == "__main__":
     print("Testing components...")
 
     orch = Orchestrator(width=64, height=32, fps=10)
-    scene = Scene(orch, width=64, height=32)
+    scene = Scene(width=64, height=32)
 
     # Add triangle
-    triangle = TriangleComponent(scene, size=10, color=(255, 0, 0))
-    scene.add_component('triangle', triangle, position=(5, 5))
+    triangle = TriangleComponent(size=10, color=(255, 0, 0))
+    scene.add_child('triangle', triangle, position=(5, 5))
 
     # Add animated square
-    square = AnimatedSquareComponent(scene, size=8, cycle_duration=3.0)
-    scene.add_component('square', square, position=(18, 12))
+    square = AnimatedSquareComponent(size=8, cycle_duration=3.0)
+    scene.add_child('square', square, position=(18, 12))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')

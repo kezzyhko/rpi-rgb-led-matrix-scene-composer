@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rpi-rgb-led-matrix-scene-composer
-Version: 0.1.0
+Version: 0.1.1
 Summary: Scene-based rendering engine for RGB LED matrices
 Author-email: Fredrik Ryden <fredrik@olisrobotics.com>
 License: MIT
@@ -24,6 +24,7 @@ Requires-Python: >=3.7
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: numpy>=1.20.0
+Requires-Dist: pillow>=9.0.0
 Provides-Extra: piomatter
 Requires-Dist: adafruit-blinka-raspberry-pi5-piomatter>=0.1.0; extra == "piomatter"
 Provides-Extra: rgbmatrix

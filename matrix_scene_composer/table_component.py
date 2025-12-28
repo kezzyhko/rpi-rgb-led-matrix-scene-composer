@@ -1,10 +1,10 @@
 """Table component for rendering structured data on LED matrices."""
 
 import numpy as np
-from typing import List, Dict, Tuple, Type, Any
-from .component import Component
+from typing import List, Dict, Tuple, Any
+from .component import Component, cache_with_dict
 from .render_buffer import RenderBuffer
-from .text_component import Text4pxComponent, Text5pxComponent
+from .text_component import TextComponent
 
 
 class TableComponent(Component):
@@ -18,7 +18,7 @@ class TableComponent(Component):
     - Optional cell padding
     - Optional borders between cells/rows
     - Separate styling for header row
-    - Uses Text4pxComponent or Text5pxComponent for rendering
+    - Uses TextComponent with configurable font height (4-16px)
     """
 
     def __init__(
@@ -26,7 +26,7 @@ class TableComponent(Component):
         data: List[Dict[str, Any]],
         headers: List[str] | None = None,
         col_widths: List[int] | None = None,
-        text_component: Type = Text4pxComponent,
+        font_height: int = 4,
         fgcolor: Tuple[int, int, int] = (255, 255, 255),
         bgcolor: Tuple[int, int, int] | None = None,
         header_fgcolor: Tuple[int, int, int] | None = None,
@@ -43,7 +43,7 @@ class TableComponent(Component):
             data: List of dictionaries, each representing a row
             headers: Column headers (if None, uses keys from first dict)
             col_widths: Width for each column in pixels (if None, auto-calculated)
-            text_component: Text component class to use (Text4pxComponent or Text5pxComponent)
+            font_height: Font height in pixels (4-16)
             fgcolor: Foreground color for data cells
             bgcolor: Background color for data cells (None = transparent)
             header_fgcolor: Foreground color for header row (None = use fgcolor)
@@ -56,7 +56,7 @@ class TableComponent(Component):
         super().__init__()
 
         self.data = data
-        self.text_component = text_component
+        self.font_height = font_height
         self.fgcolor = fgcolor
         self.bgcolor = bgcolor
         self.header_fgcolor = header_fgcolor if header_fgcolor is not None else fgcolor
@@ -99,8 +99,9 @@ class TableComponent(Component):
             max_width = 0
 
             # Check header width
-            header_text = self.text_component(
+            header_text = TextComponent(
                 text=str(header).upper(),
+                font_height=self.font_height,
                 fgcolor=self.header_fgcolor,
                 bgcolor=None,
                 padding=0
@@ -110,8 +111,9 @@ class TableComponent(Component):
             # Check data widths
             for row in self.data:
                 value = row.get(header, "")
-                cell_text = self.text_component(
+                cell_text = TextComponent(
                     text=str(value).upper(),
+                    font_height=self.font_height,
                     fgcolor=self.fgcolor,
                     bgcolor=None,
                     padding=0
@@ -142,8 +144,9 @@ class TableComponent(Component):
             return 0
 
         # Get row height from text component
-        dummy_text = self.text_component(
+        dummy_text = TextComponent(
             text="X",
+            font_height=self.font_height,
             fgcolor=self.fgcolor,
             bgcolor=None,
             padding=self.cell_padding
@@ -167,8 +170,9 @@ class TableComponent(Component):
         # Render header row (if enabled)
         if self.show_headers:
             for col_idx, header in enumerate(self.headers):
-                text_comp = self.text_component(
+                text_comp = TextComponent(
                     text=str(header).upper(),
+                    font_height=self.font_height,
                     fgcolor=self.header_fgcolor,
                     bgcolor=self.header_bgcolor,
                     padding=self.cell_padding
@@ -182,8 +186,9 @@ class TableComponent(Component):
 
             for col_idx, header in enumerate(self.headers):
                 value = row_data.get(header, "")
-                text_comp = self.text_component(
+                text_comp = TextComponent(
                     text=str(value).upper(),
+                    font_height=self.font_height,
                     fgcolor=self.fgcolor,
                     bgcolor=self.bgcolor,
                     padding=self.cell_padding
@@ -208,8 +213,9 @@ class TableComponent(Component):
             'col_widths': tuple(self.col_widths)
         }
 
-    def render(self, time: float) -> RenderBuffer:
-        """Render table."""
+    @cache_with_dict(maxsize=128)
+    def _render_cached(self, state: Dict[str, Any], time: float) -> RenderBuffer:
+        """Render table (cached)."""
         buffer = RenderBuffer(self._width, self._height)
 
         # Calculate row height

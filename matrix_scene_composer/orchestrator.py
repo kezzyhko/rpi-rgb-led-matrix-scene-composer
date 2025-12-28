@@ -1,5 +1,6 @@
 """Orchestrator - Top-level controller managing scenes and render loop."""
 
+import asyncio
 import time
 from typing import Dict, Optional, Callable
 from .scene import Scene
@@ -49,10 +50,8 @@ class Orchestrator:
 
         Args:
             scene_id: Unique identifier for the scene
-            scene: Scene instance (will adopt orchestrator's time)
+            scene: Scene instance
         """
-        # Bind scene to this orchestrator for time synchronization
-        scene.orchestrator = self
         self.scenes[scene_id] = scene
 
     def transition_to(self, scene_id: str):
@@ -91,6 +90,21 @@ class Orchestrator:
             # Return empty buffer if no scene
             return RenderBuffer(self.width, self.height)
 
+        # Update scene's internal time
+        self.current_scene._time = self.time
+
+        # Check for phase transitions (same logic as Scene.start_async)
+        scene = self.current_scene
+        scene_time = scene._time
+
+        if scene._current_phase == 'entrance' and scene._check_phase_complete(scene_time):
+            if scene.idle_animations:
+                scene.set_animation_phase('idle')
+            else:
+                scene.set_animation_phase(None)
+        elif scene._current_phase == 'idle' and scene._check_phase_complete(scene_time):
+            scene.set_animation_phase('idle')
+
         # Render current scene
         buffer = self.current_scene.render(self.time)
 
@@ -99,12 +113,19 @@ class Orchestrator:
 
         return buffer
 
-    def start(self, duration: Optional[float] = None):
+    async def start_async(self, duration: Optional[float] = None):
         """
-        Start the render loop.
+        Start the render loop (async).
 
         Args:
             duration: Optional duration in seconds. If None, runs indefinitely.
+
+        Usage:
+            async with orchestrator:
+                await orchestrator.start()
+
+            Or:
+                asyncio.run(orchestrator.start())
         """
         self.running = True
         self.time = 0.0
@@ -128,13 +149,14 @@ class Orchestrator:
                 if duration and self.time >= duration:
                     break
 
-                # Sleep to maintain target FPS
+                # Sleep to maintain target FPS (async)
                 frame_elapsed = time.time() - frame_start
                 sleep_time = max(0, self.frame_duration - frame_elapsed)
                 if sleep_time > 0:
-                    time.sleep(sleep_time)
+                    await asyncio.sleep(sleep_time)
 
-        except KeyboardInterrupt:
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
             pass
         finally:
             self.running = False
@@ -142,6 +164,31 @@ class Orchestrator:
     def stop(self):
         """Stop the render loop."""
         self.running = False
+
+    def start(self, duration: Optional[float] = None):
+        """
+        Start the render loop (synchronous wrapper).
+
+        Args:
+            duration: Optional duration in seconds. If None, runs indefinitely.
+
+        Usage:
+            # Synchronous (blocks until stopped):
+            orch.start()
+
+            # Async (use start_async instead):
+            await orch.start_async()
+        """
+        asyncio.run(self.start_async(duration))
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - stops the orchestrator."""
+        self.stop()
+        return False
 
     def render_single_frame(self, time_value: float) -> RenderBuffer:
         """

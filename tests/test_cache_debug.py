@@ -26,15 +26,15 @@ def test_caching():
     orch = Orchestrator(width=64, height=32, fps=10)
 
     # Create scene
-    scene = Scene(orch, width=64, height=32)
+    scene = Scene(width=64, height=32)
 
     # Add static triangle (should cache after first render)
-    triangle = TriangleComponent(scene, size=10, color=(255, 0, 0))
-    scene.add_component('triangle', triangle, position=(5, 5))
+    triangle = TriangleComponent( size=10, color=(255, 0, 0))
+    scene.add_child('triangle', triangle, position=(5, 5))
 
     # Add animated square (should cache, but re-render when color changes)
-    square = AnimatedSquareComponent(scene, size=8, cycle_duration=10.0)
-    scene.add_component('square', square, position=(18, 8))
+    square = AnimatedSquareComponent( size=8, cycle_duration=10.0)
+    scene.add_child('square', square, position=(18, 8))
 
     # Register scene
     orch.add_scene('test', scene)

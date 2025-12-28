@@ -31,22 +31,22 @@ def test_shared_component_caching():
     orch = Orchestrator(width=64, height=32, fps=10)
 
     # Create SHARED component instance
-    triangle_instance_1 = TriangleComponent(None, size=10, color=(255, 0, 0))
+    triangle_instance_1 = TriangleComponent(size=10, color=(255, 0, 0))
 
     # Create animated component
-    animated_square = AnimatedSquareComponent(None, size=8, cycle_duration=10.0)
+    animated_square = AnimatedSquareComponent(size=8, cycle_duration=10.0)
 
     # Scene 1: Only the shared triangle
-    scene1 = Scene(orch, width=64, height=32)
+    scene1 = Scene(width=64, height=32)
     triangle_instance_1.scene = scene1  # Update scene reference
-    scene1.add_component('triangle', triangle_instance_1, position=(5, 5))
+    scene1.add_child('triangle', triangle_instance_1, position=(5, 5))
 
     # Scene 2: Shared triangle AND animated square
-    scene2 = Scene(orch, width=64, height=32)
+    scene2 = Scene(width=64, height=32)
     triangle_instance_1.scene = scene2  # Component now references scene2
     animated_square.scene = scene2
-    scene2.add_component('triangle', triangle_instance_1, position=(5, 5))
-    scene2.add_component('square', animated_square, position=(18, 8))
+    scene2.add_child('triangle', triangle_instance_1, position=(5, 5))
+    scene2.add_child('square', animated_square, position=(18, 8))
 
     # Register scenes
     orch.add_scene('scene1', scene1)

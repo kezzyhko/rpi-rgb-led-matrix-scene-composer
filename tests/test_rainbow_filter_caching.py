@@ -5,7 +5,7 @@ This test demonstrates the component hierarchy and caching:
 - Scene (orchestrator level)
   -> RainbowFilter (filter component)
     -> TableComponent (layout component)
-      -> Text4pxComponent/Text5pxComponent (primitive components)
+      -> TextComponent/TextComponent (primitive components)
         -> bitmap fonts (numpy arrays)
 
 Each layer caches its results, so re-rendering with the same state is fast.
@@ -18,8 +18,7 @@ import time as time_module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from matrix_scene_composer import (
-    Orchestrator, Scene, TableComponent, RainbowFilter,
-    Text4pxComponent, Text5pxComponent
+    Orchestrator, Scene, TableComponent, RainbowFilter, TextComponent
 )
 
 
@@ -28,7 +27,7 @@ def render_to_terminal(buffer):
     height, width = buffer.height, buffer.width
     for y in range(height):
         for x in range(width):
-            r, g, b = buffer.get_pixel(x, y)
+            r, g, b, a = buffer.get_pixel(x, y)
             print(f'\033[38;2;{r};{g};{b}m█\033[0m', end='')
         print()
 
@@ -43,13 +42,13 @@ def test_rainbow_filter_with_table():
     print("  Scene")
     print("    └─ RainbowFilter")
     print("         └─ TableComponent")
-    print("              └─ Text4pxComponent (for each cell)")
+    print("              └─ TextComponent (for each cell)")
     print("                   └─ bitmap fonts (numpy arrays)")
     print()
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Create table data
     data = [
@@ -60,9 +59,8 @@ def test_rainbow_filter_with_table():
 
     # Create table component
     table = TableComponent(
-        scene,
         data=data,
-        text_component=Text4pxComponent,
+        font_height=4,
         fgcolor=(255, 255, 255),  # White text
         header_bgcolor=(32, 32, 32),  # Dark gray header background
         cell_padding=1,
@@ -74,7 +72,6 @@ def test_rainbow_filter_with_table():
 
     # Wrap table in rainbow filter - transforms white text to rainbow
     rainbow_table = RainbowFilter(
-        scene,
         source_component=table,
         color_key=(255, 255, 255),  # Transform white pixels
         match_tolerance=10,
@@ -85,7 +82,7 @@ def test_rainbow_filter_with_table():
     print(f"RainbowFilter dimensions: {rainbow_table.width}x{rainbow_table.height}")
     print()
 
-    scene.add_component('rainbow_table', rainbow_table, position=(2, 2))
+    scene.add_child('rainbow_table', rainbow_table, position=(2, 2))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -137,18 +134,18 @@ def test_rainbow_filter_with_text():
     print("\nSimpler hierarchy:")
     print("  Scene")
     print("    └─ RainbowFilter")
-    print("         └─ Text5pxComponent")
+    print("         └─ TextComponent")
     print("              └─ bitmap fonts")
     print()
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Create text component
-    text = Text5pxComponent(
-        scene,
+    text = TextComponent(
         text="RAINBOW TEXT",
+        font_height=5,
         fgcolor=(255, 255, 255),
         bgcolor=(0, 0, 64),  # Dark blue background
         padding=2
@@ -156,7 +153,6 @@ def test_rainbow_filter_with_text():
 
     # Wrap in rainbow filter
     rainbow_text = RainbowFilter(
-        scene,
         source_component=text,
         color_key=(255, 255, 255),
         match_tolerance=10,
@@ -164,7 +160,7 @@ def test_rainbow_filter_with_text():
         speed=1.0
     )
 
-    scene.add_component('rainbow_text', rainbow_text, position=(2, 2))
+    scene.add_child('rainbow_text', rainbow_text, position=(2, 2))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -184,7 +180,7 @@ def test_rainbow_filter_diagonal():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Create table without headers
     data = [
@@ -194,9 +190,8 @@ def test_rainbow_filter_diagonal():
     ]
 
     table = TableComponent(
-        scene,
         data=data,
-        text_component=Text4pxComponent,
+        font_height=4,
         fgcolor=(255, 255, 255),
         cell_padding=2,
         show_borders=False,
@@ -205,14 +200,13 @@ def test_rainbow_filter_diagonal():
 
     # Diagonal rainbow
     rainbow_table = RainbowFilter(
-        scene,
         source_component=table,
         color_key=(255, 255, 255),
         direction='diagonal',
         speed=0.3
     )
 
-    scene.add_component('diagonal', rainbow_table, position=(2, 2))
+    scene.add_child('diagonal', rainbow_table, position=(2, 2))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -232,7 +226,7 @@ def test_cache_statistics():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     data = [
         {"a": "X", "b": "Y"},
@@ -240,17 +234,16 @@ def test_cache_statistics():
     ]
 
     table = TableComponent(
-        scene,
         data=data,
-        text_component=Text4pxComponent,
+        font_height=4,
         fgcolor=(255, 255, 255),
         cell_padding=1,
         show_borders=True
     )
 
-    rainbow = RainbowFilter(scene, table, color_key=(255, 255, 255))
+    rainbow = RainbowFilter( table, color_key=(255, 255, 255))
 
-    scene.add_component('test', rainbow, position=(0, 0))
+    scene.add_child('test', rainbow, position=(0, 0))
     orch.add_scene('test', scene)
     orch.transition_to('test')
 

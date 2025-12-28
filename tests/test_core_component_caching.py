@@ -15,8 +15,8 @@ from matrix_scene_composer import Component, RenderBuffer, cache_with_dict
 class SimpleComponent(Component):
     """Minimal component for testing caching."""
 
-    def __init__(self, scene, value: str):
-        super().__init__(scene)
+    def __init__(self, value: str):
+        super().__init__()
         self.value = value
         self.render_count = 0
 
@@ -35,13 +35,8 @@ class SimpleComponent(Component):
             'time': int(time)  # Quantize time to test caching
         }
 
-    def render(self, time: float) -> RenderBuffer:
-        """Render using cached rendering."""
-        state = self.compute_state(time)
-        return self._render_cached(state)
-
     @cache_with_dict(maxsize=128)
-    def _render_cached(self, state) -> RenderBuffer:
+    def _render_cached(self, state, time: float) -> RenderBuffer:
         """This should only be called on cache misses."""
         self.render_count += 1
         buffer = RenderBuffer(self.width, self.height)
@@ -57,11 +52,7 @@ def test_cache_hit():
     print("\n=== Test: Cache Hit ===")
 
     # Create a mock scene
-    class MockScene:
-        time = 0.0
-
-    scene = MockScene()
-    comp = SimpleComponent(scene, "test")
+    comp = SimpleComponent("test")
 
     # First render - should be cache miss
     buffer1 = comp.render(0.0)
@@ -82,11 +73,7 @@ def test_cache_miss():
     """Test that different state causes cache miss (re-render)."""
     print("\n=== Test: Cache Miss ===")
 
-    class MockScene:
-        time = 0.0
-
-    scene = MockScene()
-    comp = SimpleComponent(scene, "test")
+    comp = SimpleComponent("test")
 
     # First render at time 0
     buffer1 = comp.render(0.0)
@@ -112,11 +99,7 @@ def test_state_quantization():
     """Test that compute_state() controls cache granularity."""
     print("\n=== Test: State Quantization ===")
 
-    class MockScene:
-        time = 0.0
-
-    scene = MockScene()
-    comp = SimpleComponent(scene, "test")
+    comp = SimpleComponent("test")
 
     # Render at time 0.1 and 0.9 - both quantize to int(0)
     buffer1 = comp.render(0.1)
@@ -137,12 +120,8 @@ def test_multiple_instances():
     """Test that different instances have separate caches."""
     print("\n=== Test: Multiple Instances ===")
 
-    class MockScene:
-        time = 0.0
-
-    scene = MockScene()
-    comp1 = SimpleComponent(scene, "first")
-    comp2 = SimpleComponent(scene, "second")
+    comp1 = SimpleComponent("first")
+    comp2 = SimpleComponent("second")
 
     # Render both at same time
     buffer1 = comp1.render(0.0)

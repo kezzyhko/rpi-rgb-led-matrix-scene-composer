@@ -19,8 +19,8 @@ from matrix_scene_composer import Component, RenderBuffer, Scene, Orchestrator
 class ColorComponent(Component):
     """Simple component that fills with a solid color."""
 
-    def __init__(self, scene, width: int, height: int, color: tuple):
-        super().__init__(scene)
+    def __init__(self, width: int, height: int, color: tuple):
+        super().__init__()
         self._width = width
         self._height = height
         self.color = color
@@ -36,11 +36,12 @@ class ColorComponent(Component):
     def compute_state(self, time: float) -> dict:
         return {'color': self.color}
 
-    def render(self, time: float) -> RenderBuffer:
+    def _render_cached(self, state, time: float) -> RenderBuffer:
         buffer = RenderBuffer(self._width, self._height)
+        color = state['color']
         for y in range(self._height):
             for x in range(self._width):
-                buffer.set_pixel(x, y, self.color)
+                buffer.set_pixel(x, y, color)
         return buffer
 
 
@@ -52,11 +53,11 @@ def test_scene_management():
     orch = Orchestrator(width=width, height=height, fps=10)
 
     # Create two scenes with different colors
-    scene1 = Scene(orch, width=width, height=height)
-    scene1.add_component('red', ColorComponent(scene1, 10, 10, (255, 0, 0)), position=(0, 0))
+    scene1 = Scene(width=width, height=height)
+    scene1.add_child('red', ColorComponent(10, 10, (255, 0, 0)), position=(0, 0))
 
-    scene2 = Scene(orch, width=width, height=height)
-    scene2.add_component('blue', ColorComponent(scene2, 10, 10, (0, 0, 255)), position=(0, 0))
+    scene2 = Scene(width=width, height=height)
+    scene2.add_child('blue', ColorComponent(10, 10, (0, 0, 255)), position=(0, 0))
 
     # Add scenes to orchestrator
     orch.add_scene('scene1', scene1)
@@ -65,17 +66,17 @@ def test_scene_management():
     # Transition to scene1
     orch.transition_to('scene1')
     buffer1 = orch.render_single_frame(0.0)
-    assert buffer1.get_pixel(5, 5) == (255, 0, 0), "Should show scene1 (red)"
+    assert buffer1.get_pixel(5, 5)[:3] == (255, 0, 0), "Should show scene1 (red)"
 
     # Transition to scene2
     orch.transition_to('scene2')
     buffer2 = orch.render_single_frame(0.0)
-    assert buffer2.get_pixel(5, 5) == (0, 0, 255), "Should show scene2 (blue)"
+    assert buffer2.get_pixel(5, 5)[:3] == (0, 0, 255), "Should show scene2 (blue)"
 
     # Transition back to scene1
     orch.transition_to('scene1')
     buffer3 = orch.render_single_frame(0.0)
-    assert buffer3.get_pixel(5, 5) == (255, 0, 0), "Should show scene1 (red) again"
+    assert buffer3.get_pixel(5, 5)[:3] == (255, 0, 0), "Should show scene1 (red) again"
 
     print("✓ add_scene() works correctly")
     print("✓ transition_to() switches active scene")
@@ -89,8 +90,8 @@ def test_render_single_frame():
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
 
-    scene = Scene(orch, width=width, height=height)
-    scene.add_component('test', ColorComponent(scene, 10, 10, (128, 128, 128)), position=(5, 5))
+    scene = Scene(width=width, height=height)
+    scene.add_child('test', ColorComponent(10, 10, (128, 128, 128)), position=(5, 5))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -106,9 +107,9 @@ def test_render_single_frame():
     assert buffer3.width == 64 and buffer3.height == 32
 
     # Component should be visible in all frames
-    assert buffer1.get_pixel(7, 7) == (128, 128, 128)
-    assert buffer2.get_pixel(7, 7) == (128, 128, 128)
-    assert buffer3.get_pixel(7, 7) == (128, 128, 128)
+    assert buffer1.get_pixel(7, 7)[:3] == (128, 128, 128)
+    assert buffer2.get_pixel(7, 7)[:3] == (128, 128, 128)
+    assert buffer3.get_pixel(7, 7)[:3] == (128, 128, 128)
 
     print("✓ render_single_frame() works at different times")
     print("✓ Buffer dimensions match orchestrator dimensions")
@@ -122,11 +123,11 @@ def test_orchestrator_dimensions():
     orch_small = Orchestrator(width=32, height=16, fps=10)
     orch_large = Orchestrator(width=128, height=64, fps=10)
 
-    scene_small = Scene(orch_small, width=32, height=16)
-    scene_small.add_component('test', ColorComponent(scene_small, 5, 5, (255, 255, 255)), position=(0, 0))
+    scene_small = Scene(width=32, height=16)
+    scene_small.add_child('test', ColorComponent(5, 5, (255, 255, 255)), position=(0, 0))
 
-    scene_large = Scene(orch_large, width=128, height=64)
-    scene_large.add_component('test', ColorComponent(scene_large, 5, 5, (255, 255, 255)), position=(0, 0))
+    scene_large = Scene(width=128, height=64)
+    scene_large.add_child('test', ColorComponent(5, 5, (255, 255, 255)), position=(0, 0))
 
     orch_small.add_scene('test', scene_small)
     orch_small.transition_to('test')
@@ -176,9 +177,9 @@ def test_no_scene_rendering():
     assert buffer.width == 64 and buffer.height == 32
 
     # Check a few pixels - should all be black
-    assert buffer.get_pixel(0, 0) == (0, 0, 0)
-    assert buffer.get_pixel(32, 16) == (0, 0, 0)
-    assert buffer.get_pixel(63, 31) == (0, 0, 0)
+    assert buffer.get_pixel(0, 0)[:3] == (0, 0, 0)
+    assert buffer.get_pixel(32, 16)[:3] == (0, 0, 0)
+    assert buffer.get_pixel(63, 31)[:3] == (0, 0, 0)
 
     print("✓ Renders black buffer when no scene active")
 
@@ -190,7 +191,7 @@ def test_scene_without_components():
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
 
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
     # Don't add any components
 
     orch.add_scene('empty', scene)
@@ -201,7 +202,7 @@ def test_scene_without_components():
     assert buffer.width == 64 and buffer.height == 32
 
     # Should be all black
-    assert buffer.get_pixel(32, 16) == (0, 0, 0)
+    assert buffer.get_pixel(32, 16)[:3] == (0, 0, 0)
 
     print("✓ Empty scene renders as black buffer")
 
@@ -223,15 +224,15 @@ def test_multiple_scenes():
     ]
 
     for i, color in enumerate(colors):
-        scene = Scene(orch, width=width, height=height)
-        scene.add_component('comp', ColorComponent(scene, 10, 10, color), position=(5, 5))
+        scene = Scene(width=width, height=height)
+        scene.add_child('comp', ColorComponent(10, 10, color), position=(5, 5))
         orch.add_scene(f'scene{i}', scene)
 
     # Transition through all scenes
     for i, expected_color in enumerate(colors):
         orch.transition_to(f'scene{i}')
         buffer = orch.render_single_frame(0.0)
-        actual_color = buffer.get_pixel(7, 7)
+        actual_color = buffer.get_pixel(7, 7)[:3]
         assert actual_color == expected_color, f"Scene {i} should show {expected_color}"
 
     print("✓ Can manage multiple scenes")

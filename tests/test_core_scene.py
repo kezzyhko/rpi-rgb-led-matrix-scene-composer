@@ -14,13 +14,14 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from matrix_scene_composer import Component, RenderBuffer, Scene, Orchestrator
+from matrix_scene_composer.component import cache_with_dict
 
 
 class ColorComponent(Component):
     """Simple component that fills with a solid color."""
 
-    def __init__(self, scene, width: int, height: int, color: tuple):
-        super().__init__(scene)
+    def __init__(self, width: int, height: int, color: tuple):
+        super().__init__()
         self._width = width
         self._height = height
         self.color = color
@@ -36,7 +37,8 @@ class ColorComponent(Component):
     def compute_state(self, time: float) -> dict:
         return {'color': self.color}
 
-    def render(self, time: float) -> RenderBuffer:
+    @cache_with_dict(maxsize=128)
+    def _render_cached(self, state: dict, time: float) -> RenderBuffer:
         buffer = RenderBuffer(self._width, self._height)
         for y in range(self._height):
             for x in range(self._width):
@@ -50,15 +52,15 @@ def test_component_positioning():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Create red component at (10, 5)
-    red_comp = ColorComponent(scene, 5, 3, (255, 0, 0))
-    scene.add_component('red', red_comp, position=(10, 5))
+    red_comp = ColorComponent(5, 3, (255, 0, 0))
+    scene.add_child('red', red_comp, position=(10, 5))
 
     # Create green component at (20, 15)
-    green_comp = ColorComponent(scene, 4, 4, (0, 255, 0))
-    scene.add_component('green', green_comp, position=(20, 15))
+    green_comp = ColorComponent(4, 4, (0, 255, 0))
+    scene.add_child('green', green_comp, position=(20, 15))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -66,14 +68,14 @@ def test_component_positioning():
     buffer = orch.render_single_frame(0.0)
 
     # Verify red component at correct position
-    assert buffer.get_pixel(10, 5) == (255, 0, 0), "Red component top-left should be red"
-    assert buffer.get_pixel(14, 7) == (255, 0, 0), "Red component bottom-right should be red"
-    assert buffer.get_pixel(9, 5) == (0, 0, 0), "Pixel left of red should be black"
+    assert buffer.get_pixel(10, 5) == (255, 0, 0, 255), "Red component top-left should be red"
+    assert buffer.get_pixel(14, 7) == (255, 0, 0, 255), "Red component bottom-right should be red"
+    assert buffer.get_pixel(9, 5) == (0, 0, 0, 0), "Pixel left of red should be black"
 
     # Verify green component at correct position
-    assert buffer.get_pixel(20, 15) == (0, 255, 0), "Green component top-left should be green"
-    assert buffer.get_pixel(23, 18) == (0, 255, 0), "Green component bottom-right should be green"
-    assert buffer.get_pixel(19, 15) == (0, 0, 0), "Pixel left of green should be black"
+    assert buffer.get_pixel(20, 15) == (0, 255, 0, 255), "Green component top-left should be green"
+    assert buffer.get_pixel(23, 18) == (0, 255, 0, 255), "Green component bottom-right should be green"
+    assert buffer.get_pixel(19, 15) == (0, 0, 0, 0), "Pixel left of green should be black"
 
     print("✓ Components positioned correctly")
     print(f"✓ Red component at (10, 5) size 5x3")
@@ -86,16 +88,16 @@ def test_z_index_layering():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Create overlapping components
     # Red 10x10 at (5, 5) with z-index 1
-    red_comp = ColorComponent(scene, 10, 10, (255, 0, 0))
-    scene.add_component('red', red_comp, position=(5, 5), z_index=1)
+    red_comp = ColorComponent(10, 10, (255, 0, 0))
+    scene.add_child('red', red_comp, position=(5, 5), z_index=1)
 
     # Blue 10x10 at (10, 10) with z-index 2 (should render on top)
-    blue_comp = ColorComponent(scene, 10, 10, (0, 0, 255))
-    scene.add_component('blue', blue_comp, position=(10, 10), z_index=2)
+    blue_comp = ColorComponent(10, 10, (0, 0, 255))
+    scene.add_child('blue', blue_comp, position=(10, 10), z_index=2)
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -104,11 +106,11 @@ def test_z_index_layering():
 
     # Check overlap region (10-15, 10-15)
     # Blue should be on top because z-index 2 > 1
-    assert buffer.get_pixel(12, 12) == (0, 0, 255), "Overlap should show blue (higher z-index)"
+    assert buffer.get_pixel(12, 12) == (0, 0, 255, 255), "Overlap should show blue (higher z-index)"
 
     # Check non-overlap regions
-    assert buffer.get_pixel(7, 7) == (255, 0, 0), "Red-only area should be red"
-    assert buffer.get_pixel(17, 17) == (0, 0, 255), "Blue-only area should be blue"
+    assert buffer.get_pixel(7, 7) == (255, 0, 0, 255), "Red-only area should be red"
+    assert buffer.get_pixel(17, 17) == (0, 0, 255, 255), "Blue-only area should be blue"
 
     print("✓ Z-index layering works correctly")
     print("✓ Higher z-index renders on top in overlap regions")
@@ -120,33 +122,33 @@ def test_add_remove_component():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Add red component
-    red_comp = ColorComponent(scene, 5, 5, (255, 0, 0))
-    scene.add_component('red', red_comp, position=(10, 10))
+    red_comp = ColorComponent(5, 5, (255, 0, 0))
+    scene.add_child('red', red_comp, position=(10, 10))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
 
     # Render with component
     buffer1 = orch.render_single_frame(0.0)
-    assert buffer1.get_pixel(12, 12) == (255, 0, 0), "Red component should be visible"
+    assert buffer1.get_pixel(12, 12) == (255, 0, 0, 255), "Red component should be visible"
 
     # Remove component
-    scene.remove_component('red')
+    scene.remove_child('red')
 
     # Render without component
     buffer2 = orch.render_single_frame(0.0)
-    assert buffer2.get_pixel(12, 12) == (0, 0, 0), "Red component should be gone"
+    assert buffer2.get_pixel(12, 12) == (0, 0, 0, 0), "Red component should be gone"
 
     # Re-add component (different position)
-    scene.add_component('red', red_comp, position=(20, 20))
+    scene.add_child('red', red_comp, position=(20, 20))
 
     # Render with component at new position
     buffer3 = orch.render_single_frame(0.0)
-    assert buffer3.get_pixel(12, 12) == (0, 0, 0), "Old position should be black"
-    assert buffer3.get_pixel(22, 22) == (255, 0, 0), "New position should be red"
+    assert buffer3.get_pixel(12, 12) == (0, 0, 0, 0), "Old position should be black"
+    assert buffer3.get_pixel(22, 22) == (255, 0, 0, 255), "New position should be red"
 
     print("✓ add_component() works correctly")
     print("✓ remove_component() works correctly")
@@ -159,11 +161,11 @@ def test_scene_canvas_size():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Add component that extends beyond canvas
-    large_comp = ColorComponent(scene, 20, 20, (255, 0, 0))
-    scene.add_component('large', large_comp, position=(55, 25))
+    large_comp = ColorComponent(20, 20, (255, 0, 0))
+    scene.add_child('large', large_comp, position=(55, 25))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -174,7 +176,7 @@ def test_scene_canvas_size():
     # Position (55, 25) with size 20x20 would go to (75, 45)
     # But canvas is only 64x32, so should clip
 
-    assert buffer.get_pixel(60, 30) == (255, 0, 0), "Should render within canvas"
+    assert buffer.get_pixel(60, 30) == (255, 0, 0, 255), "Should render within canvas"
     assert buffer.width == 64, "Buffer width should match canvas"
     assert buffer.height == 32, "Buffer height should match canvas"
 
@@ -188,13 +190,13 @@ def test_multiple_components():
 
     width, height = 64, 32
     orch = Orchestrator(width=width, height=height, fps=10)
-    scene = Scene(orch, width=width, height=height)
+    scene = Scene(width=width, height=height)
 
     # Add multiple components
-    scene.add_component('red', ColorComponent(scene, 5, 5, (255, 0, 0)), position=(0, 0))
-    scene.add_component('green', ColorComponent(scene, 5, 5, (0, 255, 0)), position=(10, 0))
-    scene.add_component('blue', ColorComponent(scene, 5, 5, (0, 0, 255)), position=(0, 10))
-    scene.add_component('yellow', ColorComponent(scene, 5, 5, (255, 255, 0)), position=(10, 10))
+    scene.add_child('red', ColorComponent(5, 5, (255, 0, 0)), position=(0, 0))
+    scene.add_child('green', ColorComponent(5, 5, (0, 255, 0)), position=(10, 0))
+    scene.add_child('blue', ColorComponent(5, 5, (0, 0, 255)), position=(0, 10))
+    scene.add_child('yellow', ColorComponent(5, 5, (255, 255, 0)), position=(10, 10))
 
     orch.add_scene('test', scene)
     orch.transition_to('test')
@@ -202,10 +204,10 @@ def test_multiple_components():
     buffer = orch.render_single_frame(0.0)
 
     # Verify all components rendered correctly
-    assert buffer.get_pixel(2, 2) == (255, 0, 0), "Red at (0, 0)"
-    assert buffer.get_pixel(12, 2) == (0, 255, 0), "Green at (10, 0)"
-    assert buffer.get_pixel(2, 12) == (0, 0, 255), "Blue at (0, 10)"
-    assert buffer.get_pixel(12, 12) == (255, 255, 0), "Yellow at (10, 10)"
+    assert buffer.get_pixel(2, 2) == (255, 0, 0, 255), "Red at (0, 0)"
+    assert buffer.get_pixel(12, 2) == (0, 255, 0, 255), "Green at (10, 0)"
+    assert buffer.get_pixel(2, 12) == (0, 0, 255, 255), "Blue at (0, 10)"
+    assert buffer.get_pixel(12, 12) == (255, 255, 0, 255), "Yellow at (10, 10)"
 
     print("✓ Multiple components render correctly")
     print("✓ Each component maintains independent position")
