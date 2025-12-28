@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rpi-rgb-led-matrix-scene-composer"
+version = "0.1.0"
+description = "Scene-based rendering engine for RGB LED matrices"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "Fredrik Ryden", email = "fredrik@olisrobotics.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Hardware",
+]
+keywords = ["raspberry-pi", "led-matrix", "rgb-matrix", "display", "animation"]
+
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+# For Raspberry Pi 5 with PioMatter
+piomatter = [
+    "adafruit-blinka-raspberry-pi5-piomatter>=0.1.0",
+]
+
+# For older Raspberry Pi models with rpi-rgb-led-matrix
+rgbmatrix = [
+    "rpi-rgb-led-matrix>=0.1.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+# All optional dependencies
+all = [
+    "adafruit-blinka-raspberry-pi5-piomatter>=0.1.0",
+    "rpi-rgb-led-matrix>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer"
+Repository = "https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer"
+"Bug Tracker" = "https://github.com/fredrikolis/rpi-rgb-led-matrix-scene-composer/issues"
+
+[tool.setuptools]
+packages = ["matrix_scene_composer"]
+
+[tool.setuptools.package-data]
+matrix_scene_composer = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
+
+[tool.mypy]
+python_version = "3.7"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=matrix_scene_composer --cov-report=html --cov-report=term-missing"
